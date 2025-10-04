@@ -1,4 +1,5 @@
 import os
+import sys
 import random
 from PIL import Image
 import torch
@@ -12,16 +13,16 @@ class Input_Image:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "directory_1": ("STRING", {"default": "input/Next/Best"}),
+                "directory_1": ("STRING", {"default": "Inputs/Next/Best"}),
             },
             "optional": {
-                "directory_2": ("STRING", {"default": "input/Next"}),
-                "directory_3": ("STRING", {"default": "input/Downloaded"}),
+                "directory_2": ("STRING", {"default": "Inputs/Next"}),
+                "directory_3": ("STRING", {"default": "Inputs/Downloaded"}),
                 "ordering_mode": (["random", "sequential_by_name", "sequential_by_modified_date"],
                                   {"default": "sequential_by_modified_date"}),
                 "include_subdirectories": (["yes", "no"], {"default": "yes"}),
                 "index": ("INT", {"default": 0, "min": 0, "max": 9999999}),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 2 ** 32 - 1}),
+                "seed": ("INT", {"default": 0, "min": -1125899906842624, "max": 1125899906842624}),
             }
         }
 
@@ -36,10 +37,13 @@ class Input_Image:
         # Use seed of 0 as an indicator to use current time for true randomness
         if seed == 0:
             current_time_seed = int(datetime.now().timestamp()) % (2 ** 32)
+            # current_time_seed = random.randint(1, 1125899906842624)
+            # current_time_seed = current_time_seed % 4294967296  # Ensure value is between 0 and 2^32
             random.seed(current_time_seed)
             np.random.seed(current_time_seed)
         else:
             # Otherwise use provided seed for reproducible randomness
+            seed = seed % 4294967296  # Ensure value is between 0 and 2^32
             random.seed(seed)
             np.random.seed(seed)
 
@@ -125,14 +129,21 @@ class Input_Image:
             return noise_tensor, filename, filepath, subfolder, source
 
         # Sort files based on ordering mode
-        if ordering_mode == "random":
+        if any(os.path.basename(f).startswith("next_") for f in image_files):
+            # Filter files with next_ prefix
+            next_files = [f for f in image_files if os.path.basename(f).startswith("next_")]
+            # Sort by modification time (newest first)
+            next_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+            # Select the most recently modified next_ file
+            selected_image = next_files[0]
+        elif ordering_mode == "random":
             random.shuffle(image_files)
             selected_image = image_files[index % len(image_files)]
         elif ordering_mode == "sequential_by_name":
             image_files.sort()
             selected_image = image_files[index % len(image_files)]
         elif ordering_mode == "sequential_by_modified_date":
-            image_files.sort(key=lambda x: os.path.getmtime(x))
+            image_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
             selected_image = image_files[index % len(image_files)]
         else:
             raise ValueError(f"Unknown ordering mode: {ordering_mode}")

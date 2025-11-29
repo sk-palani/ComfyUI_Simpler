@@ -88,14 +88,16 @@ class Image_Preparations:
         # Apply delta_percent based on orientation
         if delta_percent != 0.0:
             w_res, h_res = resized_img.size
-            if h_res >= w_res:
-                # Portrait → modify width
-                new_w = max(1, int(round(w_res * (1 + delta_percent / 100.0))))
-                new_h = h_res
-            else:
-                # Landscape → modify height
-                new_w = w_res
-                new_h = max(1, int(round(h_res * (1 + delta_percent / 100.0))))
+            new_w = max(1, int(round(w_res * (1 + delta_percent / 100.0))))
+            new_h = h_res
+            # if h_res >= w_res:
+            #     # Portrait → modify width
+            #     new_w = max(1, int(round(w_res * (1 + delta_percent / 100.0))))
+            #     new_h = h_res
+            # else:
+            #     # Landscape → modify height
+            #     new_w = w_res
+            #     new_h = max(1, int(round(h_res * (1 + delta_percent / 100.0))))
             resized_img = resized_img.resize((new_w, new_h), Image.LANCZOS)
 
         # Pad if needed

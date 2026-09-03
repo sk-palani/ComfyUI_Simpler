@@ -22,46 +22,25 @@ class DynamicOptionalInputs(dict):
 
 
 class DynamicReturnTypes(tuple):
-    """Expose only the two fixed outputs to the frontend, while allowing
-    backend validation to resolve any dynamically-created output index.
-
-    ComfyUI serializes the tuple's actual contents for /object_info, so the
-    frontend sees only the two fixed outputs. Python-side output validation can
-    still index beyond those two slots for dynamic outputs.
+    """Advertise the complete fixed output surface so ComfyUI knows the
+    real type of every dynamic socket. The frontend may display only the
+    currently active subset, but BOOLEAN Found sockets remain genuinely
+    BOOLEAN to connection validation.
     """
 
     def __new__(cls):
-        return super().__new__(cls, ("STRING", "STRING"))
-
-    def __getitem__(self, index):
-        if isinstance(index, slice):
-            return super().__getitem__(index)
-        if index < 0:
-            return super().__getitem__(index)
-        if index < 2:
-            return super().__getitem__(index)
-
-        dynamic_index = index - 2
-        return "BOOLEAN" if dynamic_index % 2 else "STRING"
+        values = ["STRING", "STRING"]
+        for _ in range(20):
+            values.extend(("STRING", "BOOLEAN"))
+        return super().__new__(cls, values)
 
 
 class DynamicReturnNames(tuple):
-    """Keep the serialized node definition to the two fixed outputs."""
-
     def __new__(cls):
-        return super().__new__(cls, ("text", "matched_keywords"))
-
-    def __getitem__(self, index):
-        if isinstance(index, slice):
-            return super().__getitem__(index)
-        if index < 0:
-            return super().__getitem__(index)
-        if index < 2:
-            return super().__getitem__(index)
-        dynamic_index = index - 2
-        field = dynamic_index // 2 + 1
-        suffix = "found" if dynamic_index % 2 else "text"
-        return f"keyword_{field}_{suffix}"
+        values = ["text", "matched_keywords"]
+        for i in range(1, 21):
+            values.extend((f"keyword_{i}_text", f"keyword_{i}_found"))
+        return super().__new__(cls, values)
 
 
 class KeywordExpander:

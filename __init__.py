@@ -3,20 +3,26 @@ from .nodes.image_preparations import NODE_CLASS_MAPPINGS as IMAGE_PREP_NODE_CLA
 from .nodes.image_preparations import NODE_DISPLAY_NAME_MAPPINGS as IMAGE_PREP_DISPLAY_NAME_MAPPINGS
 from .nodes.input_image import NODE_CLASS_MAPPINGS as INPUT_IMAGE_NODE_CLASS_MAPPINGS
 from .nodes.input_image import NODE_DISPLAY_NAME_MAPPINGS as INPUT_IMAGE_DISPLAY_NAME_MAPPINGS
-from .nodes.input_selector import NODE_CLASS_MAPPINGS as INPUT_SELECTOR_NODE_CLASS_MAPPINGS
-from .nodes.input_selector import NODE_DISPLAY_NAME_MAPPINGS as INPUT_SELECTOR_DISPLAY_NAME_MAPPINGS
+
+from .nodes.keyword_expander import KeywordExpander
+from .nodes.dynamic_metadata_extractor import DynamicMetadataExtractor
 
 # Combine mappings from all node modules
 NODE_CLASS_MAPPINGS = {
     **IMAGE_PREP_NODE_CLASS_MAPPINGS,
     **INPUT_IMAGE_NODE_CLASS_MAPPINGS,
-    **INPUT_SELECTOR_NODE_CLASS_MAPPINGS
+    "DynamicMetadataExtractor": DynamicMetadataExtractor,
+    "DynamicKeywordExpander": KeywordExpander,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     **IMAGE_PREP_DISPLAY_NAME_MAPPINGS,
     **INPUT_IMAGE_DISPLAY_NAME_MAPPINGS,
-    **INPUT_SELECTOR_DISPLAY_NAME_MAPPINGS
+    "DynamicMetadataExtractor": "Dynamic Metadata Extractor",
+    "DynamicKeywordExpander": "Dynamic Keyword Expander",
 }
+
+WEB_DIRECTORY = "./js"
+
 
 __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']

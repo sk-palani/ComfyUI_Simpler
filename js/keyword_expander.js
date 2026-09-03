@@ -143,7 +143,7 @@ function rebuildFields(node) {
         // addWidget appends to node.widgets. Put dynamic widgets after the
         // fixed controls without creating a second copy of them.
         let insertAt = node.widgets.length - created.length;
-        const fixed = ["text", "field_count", "whole_word", "replace_all"];
+        const fixed = ["text", "field_count", "whole_word", "replace_all", "boolean_only"];
         const positions = fixed
             .map(name => node.widgets.findIndex(w => w.name === name))
             .filter(i => i >= 0);
@@ -188,14 +188,20 @@ function disconnectRemovedOutputs(node, wanted) {
 function updateOutputs(node) {
     const count = getCount(node);
     const booleanOnly = getBooleanOnly(node);
-    const wanted = OUTPUT_BASE + count * (booleanOnly ? 1 : 2);
+    // In boolean-only mode the output surface is compact: one BOOLEAN Found
+    // output per keyword. In normal mode each keyword has STRING Text +
+    // BOOLEAN Found. Keep the frontend output layout identical to the backend
+    // return ordering.
+    const wanted = OUTPUT_BASE + (booleanOnly ? count : count * 2);
+    const savedSize = node.size ? [...node.size] : null;
 
     if (!node.outputs) node.outputs = [];
 
-    // IMPORTANT: use LiteGraph's real addOutput/removeOutput APIs so the
-    // frontend maintains the slot type metadata used during connection
-    // validation. Temporarily suppress setSize so those APIs cannot resize
-    // the node based on the maximum/dynamic output count.
+    // The backend advertises the complete possible output type surface.
+    // The live frontend surface is reduced to the active fields/mode.  Unused sockets
+    // are removed from the live node, so they do not contribute to layout or
+    // node minimum size.  Native sockets retain their real BOOLEAN/STRING
+    // types for connection validation.
     const originalSetSize = node.setSize;
     node.setSize = function(_size) {};
     try {
@@ -207,15 +213,13 @@ function updateOutputs(node) {
         }
 
         while (node.outputs.length < wanted) {
-            const slot = node.outputs.length - OUTPUT_BASE;
-            const i = booleanOnly
-                ? slot + 1
-                : Math.floor(slot / 2) + 1;
-            const found = booleanOnly ? true : (slot % 2 === 1);
+            const dynamicIndex = node.outputs.length - OUTPUT_BASE;
+            const field = Math.floor(dynamicIndex / 2) + 1;
+            const isFound = dynamicIndex % 2 === 1;
             node.addOutput(
-                `keyword_${i}_${found ? "found" : "text"}`,
-                found ? "BOOLEAN" : "STRING",
-                { label: `keyword_${i} ${found ? "Found" : "Text"}` }
+                `keyword_${field}_${isFound ? "found" : "text"}`,
+                isFound ? "BOOLEAN" : "STRING",
+                { label: `keyword_${field} ${isFound ? "Found" : "Text"}` }
             );
         }
 
@@ -224,30 +228,46 @@ function updateOutputs(node) {
             const label = String(k?.value ?? "").trim() || `keyword_${i}`;
 
             if (booleanOnly) {
+                // Backend returns one BOOLEAN per keyword in boolean-only mode,
+                // so Found is the actual output slot at OUTPUT_BASE + i - 1.
                 const foundOut = node.outputs[OUTPUT_BASE + i - 1];
                 if (foundOut) {
                     foundOut.name = `${label}_found`;
                     foundOut.label = `${label} Found`;
                     foundOut.type = "BOOLEAN";
+                    foundOut.hidden = false;
                 }
             } else {
                 const textOut = node.outputs[OUTPUT_BASE + (i - 1) * 2];
                 const foundOut = node.outputs[OUTPUT_BASE + (i - 1) * 2 + 1];
+
                 if (textOut) {
                     textOut.name = `${label}_text`;
                     textOut.label = `${label} Text`;
                     textOut.type = "STRING";
+                    textOut.hidden = false;
                 }
                 if (foundOut) {
                     foundOut.name = `${label}_found`;
                     foundOut.label = `${label} Found`;
                     foundOut.type = "BOOLEAN";
+                    foundOut.hidden = false;
                 }
             }
         }
     } finally {
         node.setSize = originalSetSize;
     }
+
+    // Now that only active outputs remain, let LiteGraph calculate the true
+    // minimum size. Preserve a previously saved/larger size, but never use the
+    // 20-field definition as the minimum.
+    const minSize = node.computeSize ? node.computeSize() : [230, 80];
+    const baseSize = savedSize || [230, 80];
+    originalSetSize.call(node, [
+        Math.max(baseSize[0], minSize[0]),
+        Math.max(baseSize[1], minSize[1]),
+    ]);
 
     node.setDirtyCanvas(true, true);
 }
@@ -282,7 +302,11 @@ function hookBooleanOnlyToggle(node) {
             removeDynamicInputs(node);
             const booleanOnly = getBooleanOnly(node);
             for (const widget of node.widgets || []) {
-                if (widget._kwDynamic && /^expansion_\d+$/.test(widget.name)) {
+                if (!widget._kwDynamic) continue;
+                if (/^keyword_\d+$/.test(widget.name)) {
+                    widget.hidden = false;
+                    addWidgetInput(node, widget);
+                } else if (/^expansion_\d+$/.test(widget.name)) {
                     widget.hidden = booleanOnly;
                     if (!booleanOnly) addWidgetInput(node, widget);
                 }
@@ -323,7 +347,7 @@ function initialize(node) {
 }
 
 app.registerExtension({
-    name: "Comfy.DynamicKeywordExpander.v21",
+    name: "Comfy.DynamicKeywordExpander.v24",
 
     async nodeCreated(node) {
         if (node.comfyClass !== NODE_NAME) return;

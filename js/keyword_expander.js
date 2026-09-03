@@ -192,54 +192,61 @@ function updateOutputs(node) {
 
     if (!node.outputs) node.outputs = [];
 
-    // Never use addOutput/removeOutput: those can recompute node size.
-    disconnectRemovedOutputs(node, wanted);
-
-    if (node.outputs.length > wanted) {
-        node.outputs.length = wanted;
-    }
-
-    while (node.outputs.length < wanted) {
-        const slot = node.outputs.length - OUTPUT_BASE;
-        const i = booleanOnly
-            ? slot + 1
-            : Math.floor(slot / 2) + 1;
-        const found = booleanOnly ? true : (slot % 2 === 1);
-        node.outputs.push(makeOutput(
-            `keyword_${i}_${found ? "found" : "text"}`,
-            found ? "BOOLEAN" : "STRING",
-            `keyword_${i} ${found ? "Found" : "Text"}`
-        ));
-    }
-
-    for (let i = 1; i <= count; i++) {
-        const k = node.widgets?.find(w => w.name === `keyword_${i}`);
-        const label = String(k?.value ?? "").trim() || `keyword_${i}`;
-
-        if (booleanOnly) {
-            const foundOut = node.outputs[OUTPUT_BASE + i - 1];
-            if (foundOut) {
-                foundOut.name = `${label}_found`;
-                foundOut.label = `${label} Found`;
-                foundOut.type = "BOOLEAN";
-                foundOut.links ||= null;
-            }
-        } else {
-            const textOut = node.outputs[OUTPUT_BASE + (i - 1) * 2];
-            const foundOut = node.outputs[OUTPUT_BASE + (i - 1) * 2 + 1];
-            if (textOut) {
-                textOut.name = `${label}_text`;
-                textOut.label = `${label} Text`;
-                textOut.type = "STRING";
-                textOut.links ||= null;
-            }
-            if (foundOut) {
-                foundOut.name = `${label}_found`;
-                foundOut.label = `${label} Found`;
-                foundOut.type = "BOOLEAN";
-                foundOut.links ||= null;
+    // IMPORTANT: use LiteGraph's real addOutput/removeOutput APIs so the
+    // frontend maintains the slot type metadata used during connection
+    // validation. Temporarily suppress setSize so those APIs cannot resize
+    // the node based on the maximum/dynamic output count.
+    const originalSetSize = node.setSize;
+    node.setSize = function(_size) {};
+    try {
+        while (node.outputs.length > wanted) {
+            const slot = node.outputs.length - 1;
+            try { node.removeOutput(slot); } catch (_) {
+                node.outputs.splice(slot, 1);
             }
         }
+
+        while (node.outputs.length < wanted) {
+            const slot = node.outputs.length - OUTPUT_BASE;
+            const i = booleanOnly
+                ? slot + 1
+                : Math.floor(slot / 2) + 1;
+            const found = booleanOnly ? true : (slot % 2 === 1);
+            node.addOutput(
+                `keyword_${i}_${found ? "found" : "text"}`,
+                found ? "BOOLEAN" : "STRING",
+                { label: `keyword_${i} ${found ? "Found" : "Text"}` }
+            );
+        }
+
+        for (let i = 1; i <= count; i++) {
+            const k = node.widgets?.find(w => w.name === `keyword_${i}`);
+            const label = String(k?.value ?? "").trim() || `keyword_${i}`;
+
+            if (booleanOnly) {
+                const foundOut = node.outputs[OUTPUT_BASE + i - 1];
+                if (foundOut) {
+                    foundOut.name = `${label}_found`;
+                    foundOut.label = `${label} Found`;
+                    foundOut.type = "BOOLEAN";
+                }
+            } else {
+                const textOut = node.outputs[OUTPUT_BASE + (i - 1) * 2];
+                const foundOut = node.outputs[OUTPUT_BASE + (i - 1) * 2 + 1];
+                if (textOut) {
+                    textOut.name = `${label}_text`;
+                    textOut.label = `${label} Text`;
+                    textOut.type = "STRING";
+                }
+                if (foundOut) {
+                    foundOut.name = `${label}_found`;
+                    foundOut.label = `${label} Found`;
+                    foundOut.type = "BOOLEAN";
+                }
+            }
+        }
+    } finally {
+        node.setSize = originalSetSize;
     }
 
     node.setDirtyCanvas(true, true);
@@ -316,7 +323,7 @@ function initialize(node) {
 }
 
 app.registerExtension({
-    name: "Comfy.DynamicKeywordExpander.v20",
+    name: "Comfy.DynamicKeywordExpander.v21",
 
     async nodeCreated(node) {
         if (node.comfyClass !== NODE_NAME) return;

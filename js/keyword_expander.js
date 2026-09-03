@@ -188,11 +188,12 @@ function disconnectRemovedOutputs(node, wanted) {
 function updateOutputs(node) {
     const count = getCount(node);
     const booleanOnly = getBooleanOnly(node);
-    // In boolean-only mode the output surface is compact: one BOOLEAN Found
-    // output per keyword. In normal mode each keyword has STRING Text +
-    // BOOLEAN Found. Keep the frontend output layout identical to the backend
-    // return ordering.
-    const wanted = OUTPUT_BASE + (booleanOnly ? count : count * 2);
+    // Keep the live output slots aligned with the backend return ordering.
+    // Even in boolean-only mode we must retain the hidden STRING slot before
+    // each BOOLEAN Found slot, because output index determines the backend
+    // type during connection validation. We hide the Text sockets rather
+    // than compacting them away.
+    const wanted = OUTPUT_BASE + count * 2;
     const savedSize = node.size ? [...node.size] : null;
 
     if (!node.outputs) node.outputs = [];
@@ -227,32 +228,20 @@ function updateOutputs(node) {
             const k = node.widgets?.find(w => w.name === `keyword_${i}`);
             const label = String(k?.value ?? "").trim() || `keyword_${i}`;
 
-            if (booleanOnly) {
-                // Backend returns one BOOLEAN per keyword in boolean-only mode,
-                // so Found is the actual output slot at OUTPUT_BASE + i - 1.
-                const foundOut = node.outputs[OUTPUT_BASE + i - 1];
-                if (foundOut) {
-                    foundOut.name = `${label}_found`;
-                    foundOut.label = `${label} Found`;
-                    foundOut.type = "BOOLEAN";
-                    foundOut.hidden = false;
-                }
-            } else {
-                const textOut = node.outputs[OUTPUT_BASE + (i - 1) * 2];
-                const foundOut = node.outputs[OUTPUT_BASE + (i - 1) * 2 + 1];
+            const textOut = node.outputs[OUTPUT_BASE + (i - 1) * 2];
+            const foundOut = node.outputs[OUTPUT_BASE + (i - 1) * 2 + 1];
 
-                if (textOut) {
-                    textOut.name = `${label}_text`;
-                    textOut.label = `${label} Text`;
-                    textOut.type = "STRING";
-                    textOut.hidden = false;
-                }
-                if (foundOut) {
-                    foundOut.name = `${label}_found`;
-                    foundOut.label = `${label} Found`;
-                    foundOut.type = "BOOLEAN";
-                    foundOut.hidden = false;
-                }
+            if (textOut) {
+                textOut.name = `${label}_text`;
+                textOut.label = `${label} Text`;
+                textOut.type = "STRING";
+                textOut.hidden = booleanOnly;
+            }
+            if (foundOut) {
+                foundOut.name = `${label}_found`;
+                foundOut.label = `${label} Found`;
+                foundOut.type = "BOOLEAN";
+                foundOut.hidden = false;
             }
         }
     } finally {
@@ -347,7 +336,7 @@ function initialize(node) {
 }
 
 app.registerExtension({
-    name: "Comfy.DynamicKeywordExpander.v24",
+    name: "Comfy.DynamicKeywordExpander.v25",
 
     async nodeCreated(node) {
         if (node.comfyClass !== NODE_NAME) return;

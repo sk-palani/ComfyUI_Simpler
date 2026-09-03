@@ -13,7 +13,7 @@ from .nodes.dynamic_metadata_extractor import DynamicMetadataExtractor
 NODE_CLASS_MAPPINGS = {
     **IMAGE_PREP_NODE_CLASS_MAPPINGS,
     **INPUT_IMAGE_NODE_CLASS_MAPPINGS,
-    **INPUT_SELECTOR_NODE_CLASS_MAPPINGS
+    **INPUT_SELECTOR_NODE_CLASS_MAPPINGS,
     "DynamicMetadataExtractor": DynamicMetadataExtractor,
     "DynamicKeywordExpander": KeywordExpander,
 }

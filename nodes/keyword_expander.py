@@ -22,25 +22,46 @@ class DynamicOptionalInputs(dict):
 
 
 class DynamicReturnTypes(tuple):
-    """Advertise the complete fixed output surface so ComfyUI knows the
-    real type of every dynamic socket. The frontend may display only the
-    currently active subset, but BOOLEAN Found sockets remain genuinely
-    BOOLEAN to connection validation.
+    """Expose only the two fixed outputs to the frontend, while allowing
+    backend validation to resolve any dynamically-created output index.
+
+    ComfyUI serializes the tuple's actual contents for /object_info, so the
+    frontend sees only the two fixed outputs. Python-side output validation can
+    still index beyond those two slots for dynamic outputs.
     """
 
     def __new__(cls):
-        values = ["STRING", "STRING"]
-        for _ in range(20):
-            values.extend(("STRING", "BOOLEAN"))
-        return super().__new__(cls, values)
+        return super().__new__(cls, ("STRING", "STRING"))
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return super().__getitem__(index)
+        if index < 0:
+            return super().__getitem__(index)
+        if index < 2:
+            return super().__getitem__(index)
+
+        dynamic_index = index - 2
+        return "BOOLEAN" if dynamic_index % 2 else "STRING"
 
 
 class DynamicReturnNames(tuple):
+    """Keep the serialized node definition to the two fixed outputs."""
+
     def __new__(cls):
-        values = ["text", "matched_keywords"]
-        for i in range(1, 21):
-            values.extend((f"keyword_{i}_text", f"keyword_{i}_found"))
-        return super().__new__(cls, values)
+        return super().__new__(cls, ("text", "matched_keywords"))
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return super().__getitem__(index)
+        if index < 0:
+            return super().__getitem__(index)
+        if index < 2:
+            return super().__getitem__(index)
+        dynamic_index = index - 2
+        field = dynamic_index // 2 + 1
+        suffix = "found" if dynamic_index % 2 else "text"
+        return f"keyword_{field}_{suffix}"
 
 
 class KeywordExpander:
@@ -57,7 +78,6 @@ class KeywordExpander:
                 ),
                 "whole_word": ("BOOLEAN", {"default": True}),
                 "replace_all": ("BOOLEAN", {"default": True}),
-                "boolean_only": ("BOOLEAN", {"default": False}),
             },
             "optional": DynamicOptionalInputs(),
         }
@@ -76,7 +96,7 @@ class KeywordExpander:
     FUNCTION = "expand"
     CATEGORY = "text/Dynamic"
 
-    def expand(self, text, field_count, whole_word=True, replace_all=True, boolean_only=False, **kwargs):
+    def expand(self, text, field_count, whole_word=True, replace_all=True, **kwargs):
         result = text
         matched = []
         outputs = []
@@ -86,7 +106,7 @@ class KeywordExpander:
             expansion = kwargs.get(f"expansion_{i}", "") or ""
 
             if i > field_count or not keyword:
-                outputs.extend((["", False] if not boolean_only else [False]))
+                outputs.extend(["", False])
                 continue
 
             pattern = (
@@ -108,6 +128,6 @@ class KeywordExpander:
                 result = new_result
                 matched.append(keyword)
 
-            outputs.extend(([expansion if found else "", found] if not boolean_only else [found]))
+            outputs.extend([expansion if found else "", found])
 
         return tuple([result, ", ".join(matched)] + outputs)

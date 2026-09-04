@@ -8,6 +8,7 @@ from .nodes.input_selector import NODE_DISPLAY_NAME_MAPPINGS as INPUT_SELECTOR_D
 
 from .nodes.keyword_expander import KeywordExpander
 from .nodes.dynamic_metadata_extractor import DynamicMetadataExtractor
+from .nodes.dynamic_keyword_finder import DynamicKeywordFinder
 
 # Combine mappings from all node modules
 NODE_CLASS_MAPPINGS = {
@@ -16,6 +17,7 @@ NODE_CLASS_MAPPINGS = {
     **INPUT_SELECTOR_NODE_CLASS_MAPPINGS,
     "DynamicMetadataExtractor": DynamicMetadataExtractor,
     "DynamicKeywordExpander": KeywordExpander,
+    "DynamicKeywordFinder": DynamicKeywordFinder,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -24,9 +26,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     **INPUT_SELECTOR_DISPLAY_NAME_MAPPINGS,
     "DynamicMetadataExtractor": "Dynamic Metadata Extractor",
     "DynamicKeywordExpander": "Dynamic Keyword Expander",
+    "DynamicKeywordFinder": "Dynamic Keyword Finder",
 }
-
-WEB_DIRECTORY = "./js"
-
 
 __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']

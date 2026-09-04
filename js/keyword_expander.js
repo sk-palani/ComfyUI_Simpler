@@ -10,11 +10,6 @@ function getCount(node) {
     return Math.max(1, Math.min(MAX_FIELDS, Number(w?.value ?? 1)));
 }
 
-function getBooleanOnly(node) {
-    const w = node.widgets?.find(x => x.name === "boolean_only");
-    return w ? Boolean(w.value) : false;
-}
-
 function getState(node) {
     node._kwState ||= { keywords: {}, expansions: {} };
     return node._kwState;
@@ -126,24 +121,19 @@ function rebuildFields(node) {
     node.setSize = function(_size) {};
     try {
         const created = [];
-        const booleanOnly = getBooleanOnly(node);
         for (let i = 1; i <= count; i++) {
             const keywordWidget = makeTextWidget(node, `keyword_${i}`, s.keywords[i] ?? "", false);
-            created.push(keywordWidget);
-            addWidgetInput(node, keywordWidget);
-
             const expansionWidget = makeTextWidget(node, `expansion_${i}`, s.expansions[i] ?? "", true);
-            expansionWidget.hidden = booleanOnly;
+            created.push(keywordWidget);
             created.push(expansionWidget);
-            if (!booleanOnly) {
-                addWidgetInput(node, expansionWidget);
-            }
+            addWidgetInput(node, keywordWidget);
+            addWidgetInput(node, expansionWidget);
         }
 
         // addWidget appends to node.widgets. Put dynamic widgets after the
         // fixed controls without creating a second copy of them.
         let insertAt = node.widgets.length - created.length;
-        const fixed = ["text", "field_count", "whole_word", "replace_all", "boolean_only"];
+        const fixed = ["text", "field_count", "whole_word", "replace_all"];
         const positions = fixed
             .map(name => node.widgets.findIndex(w => w.name === name))
             .filter(i => i >= 0);
@@ -187,76 +177,49 @@ function disconnectRemovedOutputs(node, wanted) {
 
 function updateOutputs(node) {
     const count = getCount(node);
-    const booleanOnly = getBooleanOnly(node);
-    // Keep the live output slots aligned with the backend return ordering.
-    // Even in boolean-only mode we must retain the hidden STRING slot before
-    // each BOOLEAN Found slot, because output index determines the backend
-    // type during connection validation. We hide the Text sockets rather
-    // than compacting them away.
     const wanted = OUTPUT_BASE + count * 2;
-    const savedSize = node.size ? [...node.size] : null;
 
     if (!node.outputs) node.outputs = [];
 
-    // The backend advertises the complete possible output type surface.
-    // The live frontend surface is reduced to the active fields/mode.  Unused sockets
-    // are removed from the live node, so they do not contribute to layout or
-    // node minimum size.  Native sockets retain their real BOOLEAN/STRING
-    // types for connection validation.
-    const originalSetSize = node.setSize;
-    node.setSize = function(_size) {};
-    try {
-        while (node.outputs.length > wanted) {
-            const slot = node.outputs.length - 1;
-            try { node.removeOutput(slot); } catch (_) {
-                node.outputs.splice(slot, 1);
-            }
-        }
+    // IMPORTANT: do NOT call addOutput/removeOutput here.
+    // LiteGraph's implementations call setSize(computeSize()) in both methods.
+    // computeSize uses outputs.length as part of the node's minimum height.
+    // Directly maintaining the array avoids that implicit resize path.
+    disconnectRemovedOutputs(node, wanted);
 
-        while (node.outputs.length < wanted) {
-            const dynamicIndex = node.outputs.length - OUTPUT_BASE;
-            const field = Math.floor(dynamicIndex / 2) + 1;
-            const isFound = dynamicIndex % 2 === 1;
-            node.addOutput(
-                `keyword_${field}_${isFound ? "found" : "text"}`,
-                isFound ? "BOOLEAN" : "STRING",
-                { label: `keyword_${field} ${isFound ? "Found" : "Text"}` }
-            );
-        }
-
-        for (let i = 1; i <= count; i++) {
-            const k = node.widgets?.find(w => w.name === `keyword_${i}`);
-            const label = String(k?.value ?? "").trim() || `keyword_${i}`;
-
-            const textOut = node.outputs[OUTPUT_BASE + (i - 1) * 2];
-            const foundOut = node.outputs[OUTPUT_BASE + (i - 1) * 2 + 1];
-
-            if (textOut) {
-                textOut.name = `${label}_text`;
-                textOut.label = `${label} Text`;
-                textOut.type = "STRING";
-                textOut.hidden = booleanOnly;
-            }
-            if (foundOut) {
-                foundOut.name = `${label}_found`;
-                foundOut.label = `${label} Found`;
-                foundOut.type = "BOOLEAN";
-                foundOut.hidden = false;
-            }
-        }
-    } finally {
-        node.setSize = originalSetSize;
+    if (node.outputs.length > wanted) {
+        node.outputs.length = wanted;
     }
 
-    // Now that only active outputs remain, let LiteGraph calculate the true
-    // minimum size. Preserve a previously saved/larger size, but never use the
-    // 20-field definition as the minimum.
-    const minSize = node.computeSize ? node.computeSize() : [230, 80];
-    const baseSize = savedSize || [230, 80];
-    originalSetSize.call(node, [
-        Math.max(baseSize[0], minSize[0]),
-        Math.max(baseSize[1], minSize[1]),
-    ]);
+    while (node.outputs.length < wanted) {
+        const slot = node.outputs.length - OUTPUT_BASE;
+        const i = Math.floor(slot / 2) + 1;
+        const found = slot % 2 === 1;
+        node.outputs.push(makeOutput(
+            `keyword_${i}_${found ? "found" : "text"}`,
+            found ? "BOOLEAN" : "STRING",
+            `keyword_${i} ${found ? "Found" : "Text"}`
+        ));
+    }
+
+    for (let i = 1; i <= count; i++) {
+        const k = node.widgets?.find(w => w.name === `keyword_${i}`);
+        const label = String(k?.value ?? "").trim() || `keyword_${i}`;
+        const textOut = node.outputs[OUTPUT_BASE + (i - 1) * 2];
+        const foundOut = node.outputs[OUTPUT_BASE + (i - 1) * 2 + 1];
+        if (textOut) {
+            textOut.name = `${label}_text`;
+            textOut.label = `${label} Text`;
+            textOut.type = "STRING";
+            textOut.links ||= null;
+        }
+        if (foundOut) {
+            foundOut.name = `${label}_found`;
+            foundOut.label = `${label} Found`;
+            foundOut.type = "BOOLEAN";
+            foundOut.links ||= null;
+        }
+    }
 
     node.setDirtyCanvas(true, true);
 }
@@ -272,42 +235,6 @@ function hookCount(node) {
         rebuildFields(node);
     };
     w._kwCountHooked = true;
-}
-
-function hookBooleanOnlyToggle(node) {
-    const w = node.widgets?.find(x => x.name === "boolean_only");
-    if (!w || w._kwBooleanOnlyHooked) return;
-
-    const old = w.callback;
-    w.callback = function(...args) {
-        if (old) old.apply(this, args);
-        saveState(node);
-
-        // Toggle visibility of expansion widgets. Inputs are rebuilt so the
-        // expansion sockets disappear in boolean-only mode as well.
-        const originalSetSize = node.setSize;
-        node.setSize = function(_size) {};
-        try {
-            removeDynamicInputs(node);
-            const booleanOnly = getBooleanOnly(node);
-            for (const widget of node.widgets || []) {
-                if (!widget._kwDynamic) continue;
-                if (/^keyword_\d+$/.test(widget.name)) {
-                    widget.hidden = false;
-                    addWidgetInput(node, widget);
-                } else if (/^expansion_\d+$/.test(widget.name)) {
-                    widget.hidden = booleanOnly;
-                    if (!booleanOnly) addWidgetInput(node, widget);
-                }
-            }
-        } finally {
-            node.setSize = originalSetSize;
-        }
-
-        updateOutputs(node);
-        node.setDirtyCanvas(true, true);
-    };
-    w._kwBooleanOnlyHooked = true;
 }
 
 function hookSerialization(node) {
@@ -331,12 +258,11 @@ function initialize(node) {
     hookSerialization(node);
     loadState(node);
     hookCount(node);
-    hookBooleanOnlyToggle(node);
     rebuildFields(node);
 }
 
 app.registerExtension({
-    name: "Comfy.DynamicKeywordExpander.v25",
+    name: "Comfy.DynamicKeywordExpander.v29",
 
     async nodeCreated(node) {
         if (node.comfyClass !== NODE_NAME) return;

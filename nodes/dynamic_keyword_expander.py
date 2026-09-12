@@ -126,7 +126,10 @@ class DynamicKeywordExpander:
             result, found = _process_pair(text, keyword, expansion, whole_word, replace_all)
             results.append(result)
             found_flags.append(found)
-            expansions.append(expansion)
+            if found:
+                expansions.append(expansion)
+            else:
+                expansions.append("")
 
             # Cascaded result: each row's substitution builds on the last.
             final_text, _ = _process_pair(final_text, keyword, expansion, whole_word, replace_all)

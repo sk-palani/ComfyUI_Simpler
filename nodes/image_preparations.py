@@ -195,11 +195,3 @@ class Image_Preparations:
 
         return img
 
-
-NODE_CLASS_MAPPINGS = {
-    "Image_Preparations": Image_Preparations
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "Image_Preparations": "Image Preparations"
-}

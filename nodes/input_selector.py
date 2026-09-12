@@ -84,13 +84,3 @@ class InputSelector:
                 PromptServer.instance.send_progress_text(message, unique_id)
             return (when_false,)
 
-
-# Node registration dictionary
-NODE_CLASS_MAPPINGS = {
-    "InputSelector": InputSelector,
-}
-
-# Optional display names for nodes
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "InputSelector": "Input Selector",
-}

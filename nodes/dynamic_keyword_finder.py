@@ -1,47 +1,14 @@
 import re
 
 
-class DynamicOptionalInputs(dict):
-    """Accept keyword_1..keyword_20 as dynamically-created STRING inputs."""
-
-    def __contains__(self, key):
-        if isinstance(key, str) and re.fullmatch(r"keyword_\d+", key):
-            return True
-        return super().__contains__(key)
-
-    def __getitem__(self, key):
-        if isinstance(key, str) and re.fullmatch(r"keyword_\d+", key):
-            return ("STRING", {"default": "", "multiline": False})
-        return super().__getitem__(key)
-
-
-class DynamicReturnTypes(tuple):
-    """Keep object_info small while backend validation can resolve dynamic outputs."""
-
-    def __new__(cls):
-        return super().__new__(cls, ("BOOLEAN",))
-
-    def __getitem__(self, index):
-        if isinstance(index, slice):
-            return super().__getitem__(index)
-        if index < 0:
-            return super().__getitem__(index)
-        return "BOOLEAN"
-
-
-class DynamicReturnNames(tuple):
-    def __new__(cls):
-        return super().__new__(cls, ("keyword_1_found",))
-
-    def __getitem__(self, index):
-        if isinstance(index, slice):
-            return super().__getitem__(index)
-        if index < 0:
-            return super().__getitem__(index)
-        return f"keyword_{index + 1}_found"
-
-
 class DynamicKeywordFinder:
+    """Find multiple keywords in text and return one BOOLEAN per keyword.
+
+    The frontend creates keyword_1 .. keyword_N dynamically.  The backend
+    deliberately keeps the execution contract simple: keyword values arrive
+    through **kwargs and only the active field_count entries are evaluated.
+    """
+
     MAX_FIELDS = 20
 
     @classmethod
@@ -55,12 +22,21 @@ class DynamicKeywordFinder:
                 ),
                 "whole_word": ("BOOLEAN", {"default": True}),
             },
-            "optional": DynamicOptionalInputs(),
+            "optional": {
+                **{
+                    f"keyword_{i}": ("STRING", {"default": "", "multiline": False})
+                    for i in range(1, cls.MAX_FIELDS + 1)
+                }
+            },
         }
 
-    RETURN_TYPES = DynamicReturnTypes()
-    RETURN_NAMES = DynamicReturnNames()
+    # The frontend keeps the visible output count equal to field_count.
+    # The backend contract has a fixed maximum of BOOLEAN outputs, which keeps
+    # output typing stable and avoids dynamic type mutation.
+    RETURN_TYPES = ("BOOLEAN",) * MAX_FIELDS
+    RETURN_NAMES = tuple(f"keyword_{i}_found" for i in range(1, MAX_FIELDS + 1))
     OUTPUT_IS_LIST = (False,) * MAX_FIELDS
+
     FUNCTION = "find"
     CATEGORY = "text/Dynamic"
 
@@ -70,11 +46,9 @@ class DynamicKeywordFinder:
         results = []
 
         for i in range(1, self.MAX_FIELDS + 1):
-            if i > count:
-                break
-
             keyword = (kwargs.get(f"keyword_{i}", "") or "").strip()
-            if not keyword:
+
+            if i > count or not keyword:
                 results.append(False)
                 continue
 
@@ -83,6 +57,7 @@ class DynamicKeywordFinder:
             else:
                 pattern = re.escape(keyword)
 
-            results.append(bool(re.search(pattern, text, flags=re.IGNORECASE)))
+            results.append(re.search(pattern, text, flags=re.IGNORECASE) is not None)
 
         return tuple(results)
+

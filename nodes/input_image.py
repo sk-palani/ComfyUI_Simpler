@@ -200,12 +200,3 @@ class Input_Image:
 
         return img_tensor, filename, source, selected_image, subfolder
 
-
-# Add node to NODE_CLASS_MAPPINGS and NODE_DISPLAY_NAME_MAPPINGS
-NODE_CLASS_MAPPINGS = {
-    "Input_Image": Input_Image
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "Input_Image": "Input Image"
-}
